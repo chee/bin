@@ -1,0 +1,105 @@
+#!/bin/sh
+# resource uploader. chee.
+# deps: shasum, rsync, cut, sh
+_usage="$0 <file> [server] [root] [urlroot]"
+_deps="shasum rsync cut sh"
+_server="";
+_root="";
+_urlroot="";
+
+for dep in $_deps; do
+	if ! which $dep >/dev/null; then 
+		echo ":C you haven't got $dep! https://google.com/search?q=$dep" >&2
+		exit 2
+	fi
+done
+
+function usage() {
+	echo "usage: $_usage" >&2
+	exit $1
+}
+
+if [ "$#" -eq 0 ]; then
+	usage 1 
+fi
+
+file="$1"
+
+if ! [ -e "$file" ]; then
+	echo "$file's not a file that exists" >&2
+	usage 3
+fi
+
+if [ -d "$file" ]; then
+	echo "$file is a directory. directories are not supported :<" >&2
+	usage 4
+fi
+
+# Your server address, ip or hostname. whatever you ssh to.
+# you can make this user@server
+if [ "$#" -gt 1 ]; then
+	server="$2";
+else
+	server="$_server"
+fi
+
+if [ -z $server ]; then
+	echo "no server set, edit $0 or just, like, supply it:" >&2
+	usage 5
+fi
+
+# some webserved directory you wanna serve from (like "/www/mycoolsite.com/up/")
+if [ "$#" -gt 2 ]; then
+	root="$3"
+else
+	root="$_root"
+fi
+
+if [ -z $root ]; then
+	echo "no upload root set, edit $0 or just, like, supply it:" >&2
+	usage 6
+fi
+
+root=${root%*/}
+
+# where that directory is served from on the world wide web, with protocol (like "https://mycoolsite.com/up")
+if [ "$#" -gt 3 ]; then
+	urlroot="$4"
+else
+	urlroot="$_urlroot"
+fi
+
+if [ -z $urlroot ]; then
+	server_without_user="${server#*@}"
+	basename="${root##*/}"
+	urlroot="http://$server_without_user/$basename/"
+	echo "WARNING: no urlroot set, guessed it as $urlroot" >&2;
+fi
+
+urlroot=${urlroot%*/}
+
+# get file extension (bad news. what if it's a tar.gz)
+# errr...?
+# now if it is called lol.snaek.org.tar.gz it will get
+# a file extension of .snaek.org.tar.gz  :|
+if echo -n $file | grep -q ".tar."; then
+	extension="${file#*.}"
+else
+	extension="${file##*.}"
+fi
+
+if [ $extension == $file ]; then
+	extension=""
+else
+	extension=".$extension"
+fi
+
+# is it wise to rely on shasum? i dno. (prolly not) anyway, this here thing
+# it makes sure the server gonna serve 'er rite.
+newfile=`shasum "$file" | cut -d' ' -f1`${extension}
+
+resource="$root/$newfile"
+webresource="$urlroot/$newfile"
+
+rsync -zL "$file" $server:$resource
+echo $webresource

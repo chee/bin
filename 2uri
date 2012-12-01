@@ -1,0 +1,17 @@
+#!/bin/sh
+# usage: 2uri <file>
+if [ "$#" -ne 1 ]; then
+	echo "wrong number of arguments :c\nusage: $0 <file>" >&2
+	exit 1
+fi
+file=$1
+if ! [ -e "$file" ]; then
+	echo "$file was not found :c" >&2
+	exit 2;
+fi
+if [ -d "$1" ]; then
+	echo "lol, you can't run this on a directory" >&2
+	exit 3;
+fi
+mime=`file $file --mime-type | awk '{print $2}'`
+echo "data:$mime;base64,`base64 $file`"
