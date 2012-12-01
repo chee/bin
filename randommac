@@ -1,7 +1,12 @@
 #!/bin/sh
 # usage randommac [assign]
 
-mac=`openssl rand -hex 6 | sed 's/\(..\)/\1:/g; s/.$//'`
+# your wireless interface
 interface=en0
+
+mac=`openssl rand -hex 6 | sed "s/\(..\)/\1:/g; s/:$//"`
 echo $mac
-if [[ $1 == "assign" ]]; then sudo ifconfig en0 ether $mac; fi
+
+if [ $1 == "assign" ]; then
+	sudo ifconfig en0 ether $mac
+fi
