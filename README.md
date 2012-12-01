@@ -75,7 +75,7 @@ i like to use it like this:
 
 *or, if i've __edited the config file__*
 
-`geturl branyen_riding_horse.jpg`
+`geturl branyen_riding_horse.jpg > txt/list_of_branyen_horse_riding_resources.txt`
 
 ---
 
