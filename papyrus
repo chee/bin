@@ -11,7 +11,8 @@ const nonstd = {
 const replace = (text: string) => {
   return text.replace(
     /./g,
-    (c) => c in nonstd ? nonstd[c] : `:_${c.toLowerCase()}:`,
+    (c) =>
+      c in nonstd ? nonstd[c as keyof typeof nonstd] : `:_${c.toLowerCase()}:`,
   )
 }
 

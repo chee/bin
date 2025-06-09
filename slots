@@ -1,0 +1,20 @@
+#!/usr/bin/env -S deno run
+import { random } from "./getseq"
+const slots = "🍒 🍑 🍐 7 🍇 🍋".split(" ")
+const delay = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+const encoder = new TextEncoder()
+const NUMBER_OF_SPINS = 20
+async function spin() {
+  let spins = NUMBER_OF_SPINS
+  while (spins > 0) {
+    const roll = [0, 1, 2].map(() => random(slots)).join(" ")
+    Deno.stdout.writeSync(encoder.encode(`\r${roll}`))
+    await delay(50 + (NUMBER_OF_SPINS - spins) * 10)
+    spins--
+  }
+  const result = [0, 1, 2].map(() => random(slots)).join(" ")
+  console.log(`\r${result}`)
+}
+
+await spin()
