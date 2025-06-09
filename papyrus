@@ -1,0 +1,27 @@
+#!/usr/bin/env deno
+
+const input = Deno.stdin.isTerminal()
+  ? new Response(Deno.args.join(" ")).body!
+  : Deno.stdin.readable
+
+const nonstd = {
+  " ": ":__:",
+}
+
+const replace = (text: string) => {
+  return text.replace(
+    /./g,
+    (c) => c in nonstd ? nonstd[c] : `:_${c.toLowerCase()}:`,
+  )
+}
+
+const encoder = new TextEncoder()
+const decoder = new TextDecoder()
+
+const tr = new TransformStream<Uint8Array, Uint8Array>({
+  transform(chunk, controller) {
+    controller.enqueue(encoder.encode(replace(decoder.decode(chunk))))
+  },
+})
+
+await input.pipeThrough(tr).pipeTo(Deno.stdout.writable)

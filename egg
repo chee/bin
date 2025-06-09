@@ -1,0 +1,27 @@
+#!/bin/zsh
+sand=60
+
+if [ ! -z "$1" ]; then
+	sand=$(($sand * $1))
+fi
+trap 'printf "\e[?25h"; exit' INT TERM EXIT
+printf '\e[?25l'
+while [ $sand -gt -1 ]; do
+	clear
+	lines="$(($(tput lines) / 2))"
+	cols="$(($(tput cols) / 2))"
+	repeat $lines echo
+	repeat $cols echo -n ' '
+	if [ $sand -gt 10 ]; then
+		echo 🥚
+	elif [ $sand -gt 0 ]; then
+		echo 🐣
+	else
+		echo 🐥
+	fi
+	repeat $cols echo -n ' '
+	echo $sand
+	sand=$(($sand - 1))
+
+	sleep 1
+done

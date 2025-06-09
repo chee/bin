@@ -1,0 +1,5 @@
+#!/bin/sh
+git track
+git pull
+git commit --amend --no-edit
+git push --force
