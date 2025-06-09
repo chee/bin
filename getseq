@@ -1,0 +1,38 @@
+#!/usr/bin/env -S deno run
+export const textencoder = new TextEncoder()
+export const consonants = "bcdfghjklmnpqrstvwxyz"
+export const vowels = "aeiou"
+
+export function randnum(n: number): number {
+  const max = 0xffffffff - (0xffffffff % n)
+  let x
+  do {
+    x = crypto.getRandomValues(new Uint32Array(1))[0]
+  } while (x > max)
+  return x % n
+}
+export function random(list: string | string[], len = list.length): string {
+  return list[randnum(len)]
+}
+
+export function word(): string {
+  return random(consonants, 21) + random(vowels, 5) + random(consonants, 21) +
+    random(vowels, 5) +
+    random(consonants, 21)
+}
+
+export function writeWord(prefix = "") {
+  Deno.stdout.writeSync(textencoder.encode(prefix + word()))
+}
+
+let times = parseInt(Deno.args[0]) - 1 || 4
+
+if (import.meta.main) {
+  writeWord()
+  while (times > 0) {
+    times--
+    writeWord("-")
+  }
+
+  console.log()
+}
