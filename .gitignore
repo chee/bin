@@ -1,0 +1,7 @@
+
+# auto-generated
+.DS_Store
+node_modules/
+dist/
+.out/
+.cache/

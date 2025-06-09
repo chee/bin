@@ -1,0 +1,161 @@
+#!/usr/bin/env -S deno run --allow-run --allow-read --allow-write --allow-env
+
+import {parse} from "https://deno.land/std@0.201.0/flags/mod.ts"
+import {basename, join} from "https://deno.land/std@0.201.0/path/mod.ts"
+import {
+	green,
+	yellow,
+	red,
+	cyan,
+} from "https://deno.land/std@0.201.0/fmt/colors.ts"
+
+const {
+	_: pos,
+	yes,
+	name,
+	help,
+} = parse(Deno.args, {
+	alias: {y: "yes", n: "name", h: "help"},
+	boolean: ["yes"],
+	default: {yes: false},
+})
+
+if (help) {
+	console.log(`
+usage: git create <public|private> [dir] [--name name] [-y|--yes]
+
+options:
+  public|private   visibility (required)
+  dir              target directory (default .)
+  -n, --name       repo name
+  -y, --yes        skip prompts
+  -h, --help       show this help
+`)
+	Deno.exit(0)
+}
+
+if (pos.length < 1 || (pos[0] !== "public" && pos[0] !== "private")) {
+	console.error(red("error:"), "first arg must be 'public' or 'private'")
+	Deno.exit(1)
+}
+
+const visibility = pos[0] as "public" | "private"
+const dir = pos[1] ?? "."
+const defaultName = dir === "." ? basename(Deno.cwd()) : basename(dir)
+const repoName = name ?? defaultName
+
+async function run(cmd: string[], cwd = dir, silent = false): Promise<string> {
+	if (!silent) console.log(cyan(`$ ${cmd.join(" ")}`))
+	const command = new Deno.Command(cmd[0], {
+		args: cmd.slice(1),
+		cwd,
+		stdout: "piped",
+		stderr: "piped",
+	})
+	const {code, stdout, stderr} = await command.output()
+	if (code !== 0) {
+		if (!silent) console.error(red(new TextDecoder().decode(stderr)))
+		throw new Error(`failed: ${cmd.join(" ")}`)
+	}
+	return new TextDecoder().decode(stdout).trim()
+}
+
+async function tryRun(cmd: string[], cwd = dir): Promise<string | null> {
+	try {
+		return await run(cmd, cwd, true)
+	} catch {
+		return null
+	}
+}
+
+async function confirm(msg: string) {
+	if (yes) return
+	await Deno.stdout.write(new TextEncoder().encode(`${yellow(msg)} [y/N] `))
+	const buf = new Uint8Array(64)
+	const nread = (await Deno.stdin.read(buf)) ?? 0
+	const resp = new TextDecoder().decode(buf.subarray(0, nread)).trim()
+	if (!/^y(es)?$/i.test(resp)) {
+		console.log(red("aborted"))
+		Deno.exit(0)
+	}
+}
+
+async function ensureDir(path: string) {
+	try {
+		const st = await Deno.stat(path)
+		if (!st.isDirectory) throw new Error()
+		console.log(green(`dir exists:`), path)
+	} catch {
+		console.log(yellow(`creating dir:`), path)
+		await confirm("continue")
+		await Deno.mkdir(path, {recursive: true})
+	}
+}
+
+async function scaffoldGitIgnore(path: string) {
+	const gitignore = join(path, ".gitignore")
+	if (!(await Deno.stat(gitignore).catch(() => null))) {
+		console.log(green("adding .gitignore"))
+		await Deno.writeTextFile(
+			gitignore,
+			`
+# auto-generated
+.DS_Store
+node_modules/
+dist/
+.out/
+.cache/
+`
+		)
+	}
+}
+
+async function initialCommit(path: string) {
+	const head = await tryRun(["git", "rev-parse", "--verify", "HEAD"], path)
+	if (!head) {
+		console.log(green("making initial commit"))
+		await scaffoldGitIgnore(path)
+		await Deno.writeTextFile(join(path, "README.md"), `# ${repoName}`)
+		await run(["git", "add", "."], path)
+		await run(["git", "commit", "-m", "initial commit"], path)
+	}
+}
+
+async function setup() {
+	console.log(green("visibility:"), visibility)
+	await ensureDir(dir)
+
+	const isRepo =
+		(await tryRun(["git", "rev-parse", "--is-inside-work-tree"])) === "true"
+	if (!isRepo) {
+		console.log(yellow("initializing git repo"))
+		await confirm("init repo")
+		await run(["git", "init"])
+	} else {
+		console.log(green("git repo detected"))
+	}
+
+	const rems = (await tryRun(["git", "remote"]))?.split("\n") ?? []
+	if (rems.includes("origin")) {
+		console.log(yellow("renaming origin→upstream"))
+		await confirm("rename remote")
+		await run(["git", "remote", "rename", "origin", "upstream"])
+	}
+
+	console.log(green("creating GH repo:"), repoName)
+	await confirm("create remote")
+	await run([
+		"gh",
+		"repo",
+		"create",
+		repoName,
+		"--source=.",
+		`--${visibility}`,
+		"--remote=origin",
+	])
+
+	await initialCommit(dir)
+	console.log(green("✅ done"))
+}
+
+await setup()
