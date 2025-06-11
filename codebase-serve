@@ -4,14 +4,57 @@ import {denoPlugins} from "@luca/esbuild-deno-loader"
 import {parseArgs} from "jsr:@std/cli/parse-args"
 
 const flags = parseArgs(Deno.args, {
-	boolean: ["help"],
-	string: ["tsconfig", "platform", "format", "theme", "title"],
+	boolean: ["help", "open", "dark"],
+	string: [
+		"tsconfig",
+		"platform",
+		"format",
+		"theme",
+		"title",
+		"port",
+		"host",
+		"background",
+	],
 	default: {
 		platform: "node",
 		format: "esm",
-		theme: "github-light",
+		theme: "snazzy-light",
+		background: "white",
+		port: "5555",
+		host: "0.0.0.0",
+		dark: false,
+	},
+	negatable: ["open"],
+	alias: {
+		h: "help",
+		c: "tsconfig",
+		p: "platform",
+		f: "format",
+		s: "theme",
+		n: "title",
+		P: "port",
+		H: "hostname",
+		o: "open",
 	},
 })
+
+if (flags.help || Deno.args.length === 0) {
+	console.info(
+		`Usage: codebase-serve [options] <entry>
+Options:
+  --help          Show this help message
+  --tsconfig      Path to a tsconfig.json file used when building the graph
+  --platform      Platform to target (node, browser, deno) [default: node]
+  --format        Output format (esm, cjs) [default: esm]
+  --theme         Shiki theme to use for syntax highlighting [default: snazzy-light]
+  --title         Title of the HTML page [default: Codebase Serve]
+  --port          Port to serve on [default: 5555]
+  --hostname 	   Hostname to serve on [default: 0.0.0.0]
+  --open          Open the browser automatically when starting the server
+  `
+	)
+	Deno.exit(0)
+}
 
 if (!["esm", "cjs"].includes(flags.format)) {
 	console.error("Invalid format. Use 'esm' or 'cjs'.")
@@ -94,25 +137,35 @@ export function highlightAll(mods: {path: string; contents: string}[]) {
 
 const entry = Deno.args[0]
 
-Deno.serve(async _request => {
-	const modules = await getOrderedModules(entry)
-	const highlighted = await highlightAll(modules)
-	const body = highlighted
-		.map(({path, html}) => `<h2>${path}</h2>\n${html}`)
-		.join("\n")
-	return new Response(
-		/*html*/ `<!doctype html>
+Deno.serve(
+	{
+		port: parseInt(flags.port),
+		hostname: "0.0.0.0",
+	},
+	async _request => {
+		const modules = await getOrderedModules(entry)
+		const highlighted = await highlightAll(modules)
+		const body = highlighted
+			.map(({path, html}) => `<h2>${path}</h2>\n${html}`)
+			.join("\n")
+		return new Response(
+			/*html*/ `<!doctype html>
 <meta charset="utf-8" />
-<title>${flags.title}</title>
+<title>${flags.title} ?? "Code"</title>
 <style>
-	body { font-family: sans-serif; padding: 0; margin: 0; }
-	pre { padding: 0; white-space: pre-wrap; font-family: iosevka, monospace; }
+	:root {
+		--fill: ${flags.dark ? "black" : "white"};
+		--line: ${flags.dark ? "white" : "black"};
+	}
+	body { font-family: sans-serif; padding: 0; margin: 0; background: var(--fill); color: var(--line); }
+	pre { padding: 0; white-space: pre-wrap; font-family: iosevka, monospace; background: var(--fill)!important}
 	h2 { margin-top: 2rem; border-bottom: 1px solid #000; }
 	h2:first-child { margin-top: 0; }
 </style>
     ${body}`,
-		{
-			headers: {"Content-Type": "text/html"},
-		}
-	)
-})
+			{
+				headers: {"Content-Type": "text/html"},
+			}
+		)
+	}
+)
