@@ -1,0 +1,118 @@
+#!/usr/bin/env -S deno run --allow-read --allow-net --allow-env --allow-run
+import * as esbuild from "esbuild"
+import {denoPlugins} from "@luca/esbuild-deno-loader"
+import {parseArgs} from "jsr:@std/cli/parse-args"
+
+const flags = parseArgs(Deno.args, {
+	boolean: ["help"],
+	string: ["tsconfig", "platform", "format", "theme", "title"],
+	default: {
+		platform: "node",
+		format: "esm",
+		theme: "github-light",
+	},
+})
+
+if (!["esm", "cjs"].includes(flags.format)) {
+	console.error("Invalid format. Use 'esm' or 'cjs'.")
+	Deno.exit(1)
+}
+
+if (!["node", "browser", "deno"].includes(flags.platform)) {
+	console.error("Invalid platform. Use 'node' or 'browser'.")
+	Deno.exit(1)
+}
+
+export async function getOrderedModules(entry: string) {
+	const result = await esbuild.build({
+		entryPoints: [entry],
+		bundle: true,
+		metafile: true,
+		write: false,
+		plugins: flags.platform == "deno" ? denoPlugins() : [],
+		platform: flags.platform == "browser" ? "browser" : "node",
+		tsconfig: flags.tsconfig,
+		format: flags.format as "esm" | "cjs",
+	})
+
+	const meta = result.metafile!
+	const inputs = meta.inputs
+
+	const edges = new Map<string, Set<string>>()
+
+	for (const [file, data] of Object.entries(meta.inputs)) {
+		edges.set(file, new Set(data.imports?.map(i => i.path) ?? []))
+	}
+
+	const visited = new Set<string>()
+	const ordered: string[] = []
+
+	function visit(file: string, entry = false) {
+		if (visited.has(file)) return
+		visited.add(file)
+		if (entry) ordered.unshift(file)
+		const imports = inputs[file]?.imports ?? []
+
+		for (const impy of imports) {
+			if (!inputs[impy.path]) continue
+			visit(impy.path)
+		}
+		if (!entry) ordered.push(file)
+	}
+
+	const entryFile = Object.keys(inputs).find(i => i.endsWith(entry))!
+	visit(entryFile, true)
+
+	const modules = await Promise.all(
+		ordered
+			.filter(path => {
+				return !path.includes("node_modules")
+			})
+			.map(async path => {
+				const contents = await Deno.readTextFile(path)
+				return {path, contents}
+			})
+	)
+
+	return modules
+}
+
+import {codeToHtml} from "shiki"
+
+export function highlightAll(mods: {path: string; contents: string}[]) {
+	return Promise.all(
+		mods.map(async ({path, contents}) => {
+			const ext = path.split(".").pop() || ""
+			const html = await codeToHtml(contents, {
+				lang: ext,
+				theme: flags.theme,
+			})
+			return {path, html}
+		})
+	)
+}
+
+const entry = Deno.args[0]
+
+Deno.serve(async _request => {
+	const modules = await getOrderedModules(entry)
+	const highlighted = await highlightAll(modules)
+	const body = highlighted
+		.map(({path, html}) => `<h2>${path}</h2>\n${html}`)
+		.join("\n")
+	return new Response(
+		/*html*/ `<!doctype html>
+<meta charset="utf-8" />
+<title>${flags.title}</title>
+<style>
+	body { font-family: sans-serif; padding: 0; margin: 0; }
+	pre { padding: 0; white-space: pre-wrap; font-family: iosevka, monospace; }
+	h2 { margin-top: 2rem; border-bottom: 1px solid #000; }
+	h2:first-child { margin-top: 0; }
+</style>
+    ${body}`,
+		{
+			headers: {"Content-Type": "text/html"},
+		}
+	)
+})

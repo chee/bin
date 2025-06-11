@@ -1,0 +1,8 @@
+#!/bin/bash
+find . \
+	-type f \
+	! -path "*/node_modules/*" ! -path "*/.git/*" ! -path "*/dist/*" ! -path "*/build/*" |
+	sort |
+	while read -r file; do
+		bat --style=auto --color=always --theme=ansi "$file" | cat
+	done

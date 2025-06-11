@@ -1,0 +1,6 @@
+#!/bin/bash
+
+stdbuf -i0 -o0 -e0 \
+	enscript --color --header '$n||Page $% of $=' \
+	--file-align=2 --media=A4 --portrait --output=- |
+	# ps2pdf - - | lpr -o sides=two-sided-long-edge
